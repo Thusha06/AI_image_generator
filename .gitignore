@@ -4,7 +4,19 @@
 /node_modules
 /.pnp
 .pnp.js
+# Python
+venv/
+__pycache__/
+*.pyc
 
+# Node
+node_modules/
+
+# React build
+build/
+
+# OS
+.DS_Store
 # testing
 /coverage
 
