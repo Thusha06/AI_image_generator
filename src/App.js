@@ -1,244 +1,372 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import "./App.css";
-import axios from "axios";
 
 function App() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
-  const [processedImage, setProcessedImage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [model, setModel] = useState("grayscale");
 
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
-    setFile(selectedFile);
+const [page,setPage] = useState("landing");
 
-    if (selectedFile) {
-      setPreview(URL.createObjectURL(selectedFile));
-      setProcessedImage(null);
-    }
-  };
-  
-   const handleUpload = async () => {
-    if (!file) {
-      alert("Please select an image");
-      return;
-    }
+const [image,setImage] = useState(null);
+const [processedImage,setProcessedImage] = useState(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("model", model);
+const [model,setModel] = useState("grayscale");
+const [appliedFilter,setAppliedFilter] = useState(null);
 
-    try {
-      setLoading(true);
+const [loading,setLoading] = useState(false);
 
-      const response = await axios.post(
-        "http://127.0.0.1:8000/predict",
-        formData,
-        { responseType: "blob" }
-      );
+const videoRef = useRef(null);
+const canvasRef = useRef(null);
 
-      const imageUrl = URL.createObjectURL(response.data);
-      setProcessedImage(imageUrl);
 
-    } catch (error) {
-      alert("Processing failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+/* FILTER STYLES */
 
-  return (
-    <div style={styles.page}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>AI Image Processing Studio</h1>
+const modelStyles = {
 
-        <input
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={handleFileChange}
-          style={styles.input}
-        />
-        <div style={styles.modelContainer}>
-  {[
-    { id: "grayscale", label: "Grayscale", icon: "🖤" },
-    { id: "blur", label: "Blur", icon: "🌫" },
-    { id: "edges", label: "Edge Detection", icon: "🔍" }
-  ].map((item) => (
-    <div
-      key={item.id}
-      onClick={() => setModel(item.id)}
-      style={{
-        ...styles.modelCard,
-        border: model === item.id ? "2px solid #1976d2" : "2px solid transparent",
-        transform: model === item.id ? "scale(1.05)" : "scale(1)"
-      }}
-    >
-      <div style={styles.modelIcon}>{item.icon}</div>
-      <div style={styles.modelText}>{item.label}</div>
-    </div>
-  ))}
-</div>
+grayscale:"grayscale(100%)",
+sepia:"sepia(100%)",
+invert:"invert(100%)",
+blur:"blur(4px)",
+brightness:"brightness(140%)",
+contrast:"contrast(180%)",
+saturate:"saturate(180%)"
 
-        <button onClick={handleUpload} 
-        style={{
-          ...styles.button,
-          opacity: loading ? 0.6 : 1
-          }} disabled={loading}
-          >
-          {loading ? "Processing..." : "Process Image"}
-        </button> 
+};
 
-        {loading && <p style={styles.loading}>Processing image...</p>}
 
-        {preview && processedImage && (
-          <div style={styles.compareSection}>
-            <h2>Before vs After</h2>
+/* START CAMERA */
 
-            <div style={styles.imageRow}>
-              <div style={styles.imageCard}>
-                <p>Original</p>
-                <img src={preview} alt="original" style={styles.image} />
-              </div>
+const startCamera = async ()=>{
 
-              <div style={styles.imageCard}>
-  <p>Processed</p>
-  <img src={processedImage} alt="processed" style={styles.image} />
+const stream = await navigator.mediaDevices.getUserMedia({video:true});
 
-  <a
-    href={processedImage}
-    download="processed-image.png"
-    style={{ textDecoration: "none" }}
-  >
-    <button style={styles.downloadButton}>
-      Download Image
-    </button>
-  </a>
-</div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+videoRef.current.srcObject = stream;
+
+};
+
+
+/* CAPTURE IMAGE */
+
+const captureImage = ()=>{
+
+const canvas = canvasRef.current;
+const ctx = canvas.getContext("2d");
+
+canvas.width = videoRef.current.videoWidth;
+canvas.height = videoRef.current.videoHeight;
+
+ctx.drawImage(videoRef.current,0,0);
+
+const data = canvas.toDataURL("image/png");
+
+setImage(data);
+setProcessedImage(null);
+setAppliedFilter(null);
+
+};
+
+
+/* IMAGE UPLOAD */
+
+const handleUpload = (e)=>{
+
+const file = e.target.files[0];
+if(!file) return;
+
+const reader = new FileReader();
+
+reader.onload = ()=>{
+setImage(reader.result);
+setProcessedImage(null);
+setAppliedFilter(null);
+};
+
+reader.readAsDataURL(file);
+
+};
+
+
+/* EDGE DETECTION */
+
+const edgeDetect = (imgSrc)=>{
+
+const img = new Image();
+img.src = imgSrc;
+
+img.onload = ()=>{
+
+const canvas = canvasRef.current;
+const ctx = canvas.getContext("2d");
+
+canvas.width = img.width;
+canvas.height = img.height;
+
+ctx.drawImage(img,0,0);
+
+let imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+let data = imageData.data;
+
+for(let i=0;i<data.length;i+=4){
+
+let avg = (data[i]+data[i+1]+data[i+2])/3;
+
+data[i] = avg>120 ? 255 : 0;
+data[i+1] = avg>120 ? 255 : 0;
+data[i+2] = avg>120 ? 255 : 0;
+
 }
 
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "linear-gradient(-45deg, #667eea, #764ba2, #6b73ff, #00c6ff)",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    fontFamily: "Arial, sans-serif",
-    padding: 20,
-  },
+ctx.putImageData(imageData,0,0);
 
-  card: {
-    background: "rgba(255, 255, 255, 0.15)",
-    padding: "30px",
-    borderRadius: "20px",
-    boxShadow: "0 15px 35px rgba(0,0,0,0.2)",
-    textAlign: "center",
-    width: "100%",
-    maxWidth: "580px",
-    backdropFilter: "blur(15px)",
-    border: "1px solid rgba(255, 255, 255, 0.3)",
-  },
+setProcessedImage(canvas.toDataURL());
+setAppliedFilter(null);
 
-  title: {
-    color: "#333",
-    marginBottom: "20px",
-  },
-  input: {
-    marginBottom: "15px",
-  },
-
-  dropdown: {
-    borderRadius: "6px",
-    padding: "8px",
-    marginBottom: "15px",
-  },
-
-  button: {
-    padding: "10px 20px",
-    background: "#1976d2",
-    border: "none",
-    borderRadius: "8px",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: "16px",
-  },
-
-  loading: {
-    marginTop: "15px",
-    fontWeight: "bold",
-  },
-
-  compareContainer: {
-    display: "flex",
-    justifyContent: "center",
-    marginTop: "20px",
-  },
-
-  imageRow: {
-    display: "flex",
-    gap: "20px",
-    justifyContent: "center",
-  },
-
-  imagecard: {
-    background: "#fafafa",
-    padding: "10px",
-    borderRadius: "10px",
-    boxShadow: "0 5px 15px rgba(0,0,0,0.05)",
-  },
-
-  modelContainer: {
-    marginTop: "20px",
-    display: "flex",
-    justifyContent: "center",
-    gap: "20px",
-    marginBottom: "25px",
-    flexWrap: "wrap",
-  },
-  modelCard: {
-    width: "130px",
-    padding: "15px",
-    borderRadius: "12px",
-    background: "#ffffff",
-    boxShadow: "0 5px 15px rgba(0,0,0,0.08)",
-    textAlign: "center",
-    cursor: "pointer",
-    transition: "all 0.3s ease",
-  },
-  
-  modelIcon: {
-    fontSize: "28px",
-    marginBottom: "8px",
-  },
-
-  modelText: {
-    fontSize: "14px",
-    marginBottom: "8px",
-  },
-
-  downloadButton: {
-    padding: "8px 14px",
-    background: "#28a745",
-    marginTop: "10px",
-    border: "none",
-    borderRadius: "6px",
-    color: "white",
-    cursor: "pointer",
-    fontSize: "14px",
-  },
-
-  image: {
-    width: "200px",
-    borderRadius: "8px",
-  },
 };
+
+};
+
+
+/* PROCESS IMAGE */
+
+const handleProcess = ()=>{
+
+if(!image) return;
+
+setLoading(true);
+
+setTimeout(()=>{
+
+if(model==="edge"){
+
+edgeDetect(image);
+
+}else{
+
+setProcessedImage(image);
+setAppliedFilter(model);
+
+}
+
+setLoading(false);
+
+},1500);
+
+};
+
+
+/* DOWNLOAD IMAGE */
+
+const handleDownload = ()=>{
+
+if(!processedImage) return;
+
+const link = document.createElement("a");
+
+link.href = processedImage;
+link.download = "ai-image.png";
+
+link.click();
+
+};
+
+
+return(
+
+<div className="app-container">
+
+
+{/* FLOATING GOLD BUBBLES */}
+
+<div className="bubbles">
+<span></span>
+<span></span>
+<span></span>
+<span></span>
+</div>
+
+
+{/* LANDING PAGE */}
+
+{page==="landing" &&(
+
+<div className="glass-card">
+
+<h1 className="main-title">✨ AI Image Studio</h1>
+
+<p className="sub-text">
+Luxury AI powered image enhancement platform
+</p>
+
+<div className="features">
+
+<div className="feature-card">⚡ Instant Processing</div>
+<div className="feature-card">🎨 AI Filters</div>
+<div className="feature-card">📷 Live Camera</div>
+<div className="feature-card">⬇ HD Download</div>
+
+</div>
+
+<button className="gold-btn" onClick={()=>setPage("about")}>
+Explore Studio
+</button>
+
+</div>
+
+)}
+
+
+{/* ABOUT PAGE */}
+
+{page==="about" &&(
+
+<div className="glass-card">
+
+<button className="back-btn" onClick={()=>setPage("landing")}>
+← Back
+</button>
+
+<h2>About AI Image Studio</h2>
+
+<p className="about-text">
+
+AI Image Processing Lab is a smart platform that demonstrates how artificial intelligence can enhance digital images. Users can upload or capture images and apply multiple AI-powered filters such as grayscale conversion, brightness adjustment, contrast enhancement, and edge detection. The system showcases how modern AI and computer vision techniques can analyze and improve visual data in real time.
+
+</p>
+
+<div className="about-grid">
+
+<div className="about-card">⚡ Real Time Processing</div>
+<div className="about-card">📷 Camera Capture</div>
+<div className="about-card">🧠 AI Filters</div>
+<div className="about-card">⬇ HD Export</div>
+
+</div>
+
+<button className="gold-btn" onClick={()=>setPage("studio")}>
+Launch Studio
+</button>
+
+</div>
+
+)}
+
+
+{/* STUDIO PAGE */}
+
+{page==="studio" &&(
+
+<div className="glass-card studio-card">
+
+<button className="back-btn" onClick={()=>setPage("about")}>
+← Back
+</button>
+
+<h2>AI Image Processing Lab</h2>
+
+
+{/* CONTROLS */}
+
+<div className="controls">
+
+<input type="file" onChange={handleUpload}/>
+
+<button className="gold-btn" onClick={startCamera}>
+Start Camera
+</button>
+
+<button className="gold-btn" onClick={captureImage}>
+Capture
+</button>
+
+</div>
+
+
+{/* CAMERA */}
+
+<div className="camera-area">
+
+<video ref={videoRef} autoPlay></video>
+
+<canvas ref={canvasRef} style={{display:"none"}}/>
+
+</div>
+
+
+{/* MODEL BAR */}
+
+<div className="model-bar">
+
+<select value={model} onChange={(e)=>setModel(e.target.value)}>
+
+<option value="grayscale">Grayscale</option>
+<option value="sepia">Sepia</option>
+<option value="invert">Invert</option>
+<option value="blur">Blur</option>
+<option value="brightness">Brightness</option>
+<option value="contrast">Contrast</option>
+<option value="saturate">Saturate</option>
+<option value="edge">Edge Detection</option>
+
+</select>
+
+<button className="gold-btn" onClick={handleProcess}>
+Process
+</button>
+
+</div>
+
+
+{/* LOADER */}
+
+{loading && <div className="loader"></div>}
+
+
+{/* RESULT SECTION */}
+
+<div className="result-grid">
+
+
+<div className="result-box">
+
+<h3>Before</h3>
+
+{image && <img src={image} alt="before"/>}
+
+</div>
+
+
+<div className="result-box">
+
+<h3>After</h3>
+
+{processedImage && !loading &&(
+
+<>
+
+<img
+src={processedImage}
+alt="after"
+style={appliedFilter ? {filter:modelStyles[appliedFilter]}:{}}
+/>
+
+<button className="gold-btn" onClick={handleDownload}>
+Download
+</button>
+
+</>
+
+)}
+
+</div>
+
+</div>
+
+</div>
+
+)}
+
+</div>
+
+);
+
+}
 
 export default App;
