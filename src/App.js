@@ -1,372 +1,289 @@
 import React, { useState, useRef } from "react";
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
 import "./App.css";
 
+/* ================= LOGIN ================= */
+function Login({ onLogin }) {
+  const [user,setUser]=useState("");
+  const [pass,setPass]=useState("");
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <h1>✨ Welcome</h1>
+        <p>AI Image Studio</p>
+
+        <input placeholder="Username" onChange={(e)=>setUser(e.target.value)}/>
+        <input type="password" placeholder="Password" onChange={(e)=>setPass(e.target.value)}/>
+        <button onClick={()=>user && pass && onLogin(true)}>Login</button>
+      </div>
+    </div>
+  );
+}
+
+/* ================= SIDEBAR ================= */
+function Sidebar({ children }) {
+  return (
+    <div className="app-layout">
+      <div className="sidebar">
+        <h2>🌿 AI Studio</h2>
+        <nav>
+          <Link to="/dashboard">Dashboard</Link>
+          <Link to="/models">Models</Link>
+          <Link to="/studio">Studio</Link>
+          <Link to="/history">History</Link>
+          <Link to="/settings">Settings</Link>
+        </nav>
+      </div>
+      <div className="main-content">{children}</div>
+    </div>
+  );
+}
+
+/* ================= DASHBOARD ================= */
+function Dashboard() {
+  return (
+    <div className="dashboard-full">
+      <div className="main-card">
+        <h1>📊 AI Image Studio</h1>
+
+        <p>
+          Transform your images with AI-powered tools. Upload or capture photos,
+          apply smart models, and download results instantly.
+        </p>
+
+        <div className="dashboard-grid">
+          <div className="card">🎨 Studio<br/><span>Process images instantly</span></div>
+          <div className="card">🧠 Models<br/><span>8 AI transformations</span></div>
+          <div className="card">📂 History<br/><span>Track processed images</span></div>
+          <div className="card">⚙️ Settings<br/><span>Customize experience</span></div>
+        </div>
+
+        <div className="dashboard-extra">
+          <div className="card">⚡ Fast Processing</div>
+          <div className="card">📸 Camera Support</div>
+          <div className="card">💾 Download Results</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= MODELS ================= */
+function Models() {
+  const models = [
+    ["Blur 🌀","Smoothens image"],
+    ["Edge Detection ✏️","Detect edges"],
+    ["Greyscale ⚫","Black & white"],
+    ["Sharpen 🔍","Enhance clarity"],
+    ["Brightness 🌞","Increase brightness"],
+    ["Invert 🎨","Invert colors"],
+    ["Color Enhance 🌈","Boost colors"],
+    ["Background Removal 🧩","Remove background"]
+  ];
+
+  return (
+    <div className="main-card">
+      <h1>🧩 Models</h1>
+      <p className="tagline">Explore powerful AI transformations</p>
+
+      <div className="models-grid">
+        {models.map((m,i)=>(
+          <div key={i} className="model-card">
+            <h3>{m[0]}</h3>
+            <p>{m[1]}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ================= STUDIO ================= */
+function Studio({ history, setHistory }) {
+  const [img,setImg]=useState(null);
+  const [out,setOut]=useState(null);
+  const [model,setModel]=useState("Blur");
+
+  const fileRef=useRef();
+  const videoRef=useRef();
+  const [cam,setCam]=useState(false);
+
+  const models=["Blur","Greyscale","Brightness","Invert","Color Enhance","Sharpen"];
+
+  const startCam=async()=>{
+    setCam(true);
+    const stream=await navigator.mediaDevices.getUserMedia({video:true});
+    videoRef.current.srcObject=stream;
+  };
+
+  const capture=()=>{
+    const c=document.createElement("canvas");
+    c.width=videoRef.current.videoWidth;
+    c.height=videoRef.current.videoHeight;
+    c.getContext("2d").drawImage(videoRef.current,0,0);
+    setImg({url:c.toDataURL()});
+  };
+
+  const upload=(e)=>{
+    const f=e.target.files[0];
+    if(f) setImg({url:URL.createObjectURL(f)});
+  };
+
+  const process=()=>{
+    if(!img) return;
+
+    const image=new Image();
+    image.src=img.url;
+
+    image.onload=()=>{
+      const canvas=document.createElement("canvas");
+      canvas.width=image.width;
+      canvas.height=image.height;
+      const ctx=canvas.getContext("2d");
+
+      switch(model){
+        case "Blur": ctx.filter="blur(4px)"; break;
+        case "Greyscale": ctx.filter="grayscale(100%)"; break;
+        case "Brightness": ctx.filter="brightness(1.4)"; break;
+        case "Invert": ctx.filter="invert(100%)"; break;
+        case "Color Enhance": ctx.filter="contrast(1.4) saturate(1.6)"; break;
+        case "Sharpen": ctx.filter="contrast(1.5)"; break;
+        default: break;
+      }
+
+      ctx.drawImage(image,0,0);
+
+      const result=canvas.toDataURL();
+      setOut(result);
+      setHistory(prev=>[...prev,{before:img.url,after:result}]);
+    };
+  };
+
+  const download=()=>{
+    const a=document.createElement("a");
+    a.href=out;
+    a.download="image.png";
+    a.click();
+  };
+
+  return (
+    <div className="main-card">
+      <h1>🎨 Studio</h1>
+      <p>✨ Transform your photo with AI models</p>
+
+      <div className="studio-controls">
+        <input type="file" hidden ref={fileRef} onChange={upload}/>
+        <button onClick={()=>fileRef.current.click()}>Upload</button>
+
+        {!cam && <button onClick={startCam}>Camera</button>}
+        {cam && <button onClick={capture}>Capture</button>}
+
+        <select onChange={(e)=>setModel(e.target.value)}>
+          {models.map((m,i)=><option key={i}>{m}</option>)}
+        </select>
+
+        <button onClick={process}>Process</button>
+      </div>
+
+      {/* Camera preview */}
+      {cam && (
+        <div className="camera-preview">
+          <video ref={videoRef} autoPlay/>
+        </div>
+      )}
+
+      <div className="studio-grid">
+        {img && (
+          <div className="image-card">
+            <h3>Before</h3>
+            <img src={img.url}/>
+          </div>
+        )}
+
+        {out && (
+          <div className="image-card">
+            <h3>After</h3>
+            <img src={out}/>
+          </div>
+        )}
+      </div>
+
+      {out && (
+        <div className="download-center">
+          <button onClick={download}>Download Result</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ================= HISTORY ================= */
+function History({ history }) {
+  return (
+    <div className="main-card">
+      <h1>📂 History</h1>
+
+      <div className="history-grid">
+        {history.map((h,i)=>(
+          <div key={i} className="history-card">
+            <h3>#{i+1}</h3>
+            <div className="history-row">
+              <img src={h.before}/>
+              <img src={h.after}/>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ================= SETTINGS ================= */
+function Settings() {
+  const [dark,setDark]=useState(true);
+  const [anim,setAnim]=useState(true);
+
+  return (
+    <div className="main-card">
+      <h1>⚙️ Settings</h1>
+
+      <div className="settings-grid">
+        <div className="card">
+          <input type="checkbox" checked={dark} onChange={()=>setDark(!dark)}/>
+          Dark Mode
+        </div>
+
+        <div className="card">
+          <input type="checkbox" checked={anim} onChange={()=>setAnim(!anim)}/>
+          Animations
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================= APP ================= */
 function App() {
-
-const [page,setPage] = useState("landing");
-
-const [image,setImage] = useState(null);
-const [processedImage,setProcessedImage] = useState(null);
-
-const [model,setModel] = useState("grayscale");
-const [appliedFilter,setAppliedFilter] = useState(null);
-
-const [loading,setLoading] = useState(false);
-
-const videoRef = useRef(null);
-const canvasRef = useRef(null);
-
-
-/* FILTER STYLES */
-
-const modelStyles = {
-
-grayscale:"grayscale(100%)",
-sepia:"sepia(100%)",
-invert:"invert(100%)",
-blur:"blur(4px)",
-brightness:"brightness(140%)",
-contrast:"contrast(180%)",
-saturate:"saturate(180%)"
-
-};
-
-
-/* START CAMERA */
-
-const startCamera = async ()=>{
-
-const stream = await navigator.mediaDevices.getUserMedia({video:true});
-
-videoRef.current.srcObject = stream;
-
-};
-
-
-/* CAPTURE IMAGE */
-
-const captureImage = ()=>{
-
-const canvas = canvasRef.current;
-const ctx = canvas.getContext("2d");
-
-canvas.width = videoRef.current.videoWidth;
-canvas.height = videoRef.current.videoHeight;
-
-ctx.drawImage(videoRef.current,0,0);
-
-const data = canvas.toDataURL("image/png");
-
-setImage(data);
-setProcessedImage(null);
-setAppliedFilter(null);
-
-};
-
-
-/* IMAGE UPLOAD */
-
-const handleUpload = (e)=>{
-
-const file = e.target.files[0];
-if(!file) return;
-
-const reader = new FileReader();
-
-reader.onload = ()=>{
-setImage(reader.result);
-setProcessedImage(null);
-setAppliedFilter(null);
-};
-
-reader.readAsDataURL(file);
-
-};
-
-
-/* EDGE DETECTION */
-
-const edgeDetect = (imgSrc)=>{
-
-const img = new Image();
-img.src = imgSrc;
-
-img.onload = ()=>{
-
-const canvas = canvasRef.current;
-const ctx = canvas.getContext("2d");
-
-canvas.width = img.width;
-canvas.height = img.height;
-
-ctx.drawImage(img,0,0);
-
-let imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-let data = imageData.data;
-
-for(let i=0;i<data.length;i+=4){
-
-let avg = (data[i]+data[i+1]+data[i+2])/3;
-
-data[i] = avg>120 ? 255 : 0;
-data[i+1] = avg>120 ? 255 : 0;
-data[i+2] = avg>120 ? 255 : 0;
-
-}
-
-ctx.putImageData(imageData,0,0);
-
-setProcessedImage(canvas.toDataURL());
-setAppliedFilter(null);
-
-};
-
-};
-
-
-/* PROCESS IMAGE */
-
-const handleProcess = ()=>{
-
-if(!image) return;
-
-setLoading(true);
-
-setTimeout(()=>{
-
-if(model==="edge"){
-
-edgeDetect(image);
-
-}else{
-
-setProcessedImage(image);
-setAppliedFilter(model);
-
-}
-
-setLoading(false);
-
-},1500);
-
-};
-
-
-/* DOWNLOAD IMAGE */
-
-const handleDownload = ()=>{
-
-if(!processedImage) return;
-
-const link = document.createElement("a");
-
-link.href = processedImage;
-link.download = "ai-image.png";
-
-link.click();
-
-};
-
-
-return(
-
-<div className="app-container">
-
-
-{/* FLOATING GOLD BUBBLES */}
-
-<div className="bubbles">
-<span></span>
-<span></span>
-<span></span>
-<span></span>
-</div>
-
-
-{/* LANDING PAGE */}
-
-{page==="landing" &&(
-
-<div className="glass-card">
-
-<h1 className="main-title">✨ AI Image Studio</h1>
-
-<p className="sub-text">
-Luxury AI powered image enhancement platform
-</p>
-
-<div className="features">
-
-<div className="feature-card">⚡ Instant Processing</div>
-<div className="feature-card">🎨 AI Filters</div>
-<div className="feature-card">📷 Live Camera</div>
-<div className="feature-card">⬇ HD Download</div>
-
-</div>
-
-<button className="gold-btn" onClick={()=>setPage("about")}>
-Explore Studio
-</button>
-
-</div>
-
-)}
-
-
-{/* ABOUT PAGE */}
-
-{page==="about" &&(
-
-<div className="glass-card">
-
-<button className="back-btn" onClick={()=>setPage("landing")}>
-← Back
-</button>
-
-<h2>About AI Image Studio</h2>
-
-<p className="about-text">
-
-AI Image Processing Lab is a smart platform that demonstrates how artificial intelligence can enhance digital images. Users can upload or capture images and apply multiple AI-powered filters such as grayscale conversion, brightness adjustment, contrast enhancement, and edge detection. The system showcases how modern AI and computer vision techniques can analyze and improve visual data in real time.
-
-</p>
-
-<div className="about-grid">
-
-<div className="about-card">⚡ Real Time Processing</div>
-<div className="about-card">📷 Camera Capture</div>
-<div className="about-card">🧠 AI Filters</div>
-<div className="about-card">⬇ HD Export</div>
-
-</div>
-
-<button className="gold-btn" onClick={()=>setPage("studio")}>
-Launch Studio
-</button>
-
-</div>
-
-)}
-
-
-{/* STUDIO PAGE */}
-
-{page==="studio" &&(
-
-<div className="glass-card studio-card">
-
-<button className="back-btn" onClick={()=>setPage("about")}>
-← Back
-</button>
-
-<h2>AI Image Processing Lab</h2>
-
-
-{/* CONTROLS */}
-
-<div className="controls">
-
-<input type="file" onChange={handleUpload}/>
-
-<button className="gold-btn" onClick={startCamera}>
-Start Camera
-</button>
-
-<button className="gold-btn" onClick={captureImage}>
-Capture
-</button>
-
-</div>
-
-
-{/* CAMERA */}
-
-<div className="camera-area">
-
-<video ref={videoRef} autoPlay></video>
-
-<canvas ref={canvasRef} style={{display:"none"}}/>
-
-</div>
-
-
-{/* MODEL BAR */}
-
-<div className="model-bar">
-
-<select value={model} onChange={(e)=>setModel(e.target.value)}>
-
-<option value="grayscale">Grayscale</option>
-<option value="sepia">Sepia</option>
-<option value="invert">Invert</option>
-<option value="blur">Blur</option>
-<option value="brightness">Brightness</option>
-<option value="contrast">Contrast</option>
-<option value="saturate">Saturate</option>
-<option value="edge">Edge Detection</option>
-
-</select>
-
-<button className="gold-btn" onClick={handleProcess}>
-Process
-</button>
-
-</div>
-
-
-{/* LOADER */}
-
-{loading && <div className="loader"></div>}
-
-
-{/* RESULT SECTION */}
-
-<div className="result-grid">
-
-
-<div className="result-box">
-
-<h3>Before</h3>
-
-{image && <img src={image} alt="before"/>}
-
-</div>
-
-
-<div className="result-box">
-
-<h3>After</h3>
-
-{processedImage && !loading &&(
-
-<>
-
-<img
-src={processedImage}
-alt="after"
-style={appliedFilter ? {filter:modelStyles[appliedFilter]}:{}}
-/>
-
-<button className="gold-btn" onClick={handleDownload}>
-Download
-</button>
-
-</>
-
-)}
-
-</div>
-
-</div>
-
-</div>
-
-)}
-
-</div>
-
-);
-
+  const [logged,setLogged]=useState(false);
+  const [history,setHistory]=useState([]);
+
+  if(!logged) return <Login onLogin={setLogged}/>;
+
+  return (
+    <Router>
+      <Sidebar>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard"/>}/>
+          <Route path="/dashboard" element={<Dashboard/>}/>
+          <Route path="/models" element={<Models/>}/>
+          <Route path="/studio" element={<Studio history={history} setHistory={setHistory}/>}/>
+          <Route path="/history" element={<History history={history}/>}/>
+          <Route path="/settings" element={<Settings/>}/>
+        </Routes>
+      </Sidebar>
+    </Router>
+  );
 }
 
 export default App;

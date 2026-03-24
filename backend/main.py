@@ -1,16 +1,13 @@
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image, ImageFilter
-import os
-
-from database import engine, SessionLocal
-from models import Base, ImageHistory
+from fastapi.responses import StreamingResponse
+import numpy as np
+import cv2
+from io import BytesIO
 
 app = FastAPI()
 
-Base.metadata.create_all(bind=engine)
-
+# ✅ CORS (VERY IMPORTANT)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,57 +16,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_FOLDER = "processed"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# ✅ IMAGE PROCESS FUNCTION
+def process_image(image, operation):
+    if operation == "grayscale":
+        return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    elif operation == "blur":
+        return cv2.GaussianBlur(image, (15, 15), 0)
+
+    elif operation == "edge":
+        return cv2.Canny(image, 100, 200)
+
+    elif operation == "invert":
+        return cv2.bitwise_not(image)
+
+    elif operation == "brightness":
+        return cv2.convertScaleAbs(image, alpha=1, beta=50)
+
+    elif operation == "contrast":
+        return cv2.convertScaleAbs(image, alpha=2, beta=0)
+
+    elif operation == "sharpen":
+        kernel = np.array([[0, -1, 0],
+                           [-1, 5,-1],
+                           [0, -1, 0]])
+        return cv2.filter2D(image, -1, kernel)
+
+    elif operation == "threshold":
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+        return thresh
+
+    else:
+        return image
 
 
+# ✅ MAIN API ROUTE (MATCH FRONTEND)
 @app.post("/predict")
 async def predict(
     file: UploadFile = File(...),
-    model: str = Form(...)
+    operation: str = Form(...)
 ):
-    input_path = os.path.join(UPLOAD_FOLDER, file.filename)
+    try:
+        contents = await file.read()
 
-    with open(input_path, "wb") as f:
-        f.write(await file.read())
+        # Convert to OpenCV format
+        np_arr = np.frombuffer(contents, np.uint8)
+        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
 
-    img = Image.open(input_path)
+        # Process image
+        processed = process_image(image, operation)
 
-    if model == "grayscale":
-        processed = img.convert("L")
-    elif model == "blur":
-        processed = img.filter(ImageFilter.BLUR)
-    elif model == "edges":
-        processed = img.filter(ImageFilter.FIND_EDGES)
-    else:
-        processed = img
+        # Handle grayscale images
+        if len(processed.shape) == 2:
+            processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
 
-    output_path = os.path.join(UPLOAD_FOLDER, "processed_" + file.filename)
-    processed.save(output_path)
+        # Encode to PNG
+        _, buffer = cv2.imencode(".png", processed)
 
-    db = SessionLocal()
-    history = ImageHistory(
-        filename=file.filename,
-        model_used=model,
-        processed_path=output_path
-    )
-    db.add(history)
-    db.commit()
-    db.close()
+        return StreamingResponse(
+            BytesIO(buffer.tobytes()),
+            media_type="image/png"
+        )
 
-    return FileResponse(output_path, media_type="image/png")
-
-@app.get("/history")
-def get_history():
-    db = SessionLocal()
-    data = db.query(ImageHistory).all()
-    db.close()
-
-    return [
-        {
-            "filename": item.filename,
-            "model": item.model_used,
-            "time": item.created_at
-        }
-        for item in data
-    ]
+    except Exception as e:
+        print("ERROR:", e)
+        return {"error": str(e)}
